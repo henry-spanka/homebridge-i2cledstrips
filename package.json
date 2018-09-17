@@ -1,6 +1,6 @@
 {
     "name": "homebridge-i2cledstrips",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Accessory plugin to manage led strips via the I2C bus",
     "license": "MIT",
     "keywords": [
