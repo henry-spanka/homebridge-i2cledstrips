@@ -41,7 +41,6 @@ volatile byte currentAddress;
 
 void setup() {
   Serial.begin(9600); // For Debug Purposes
-  Serial1.begin(9600, SERIAL_8N1); // Power Consumption IR Sensor
   Wire.begin(I2C_SLAVE_ADDRESS);
   Wire.onRequest(wireRequestEvent);
   Wire.onReceive(wireReceiveEvent);
