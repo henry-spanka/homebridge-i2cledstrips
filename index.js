@@ -21,17 +21,17 @@ function I2CLED(log, config) {
     };
 
     this.cache = {
-        'red': 0,
-        'green': 0,
-        'blue': 0,
         'hue': null,
         'saturation': 100,
-        'brightness': 100
+        'brightness': 100,
+        'state': false
     };
 
     this.wire = new i2c(this.i2cAddress, {
         device: this.i2cDevice
     });
+
+    this.services = {};
 }
 
 I2CLED.prototype = {
@@ -43,37 +43,37 @@ I2CLED.prototype = {
     },
 
     getServices: function() {
-        var informationService = new Service.AccessoryInformation();
+        this.services.informationService = new Service.AccessoryInformation();
 
-        informationService
+        this.services.informationService
             .setCharacteristic(Characteristic.Manufacturer, 'Henry Spanka')
             .setCharacteristic(Characteristic.Model, 'I2C LED Strip')
             .setCharacteristic(Characteristic.SerialNumber, this.name);
 
         this.log('creating Lightbulb');
-        var lightbulbService = new Service.Lightbulb(this.name);
+        this.services.lightbulbService = new Service.Lightbulb(this.name);
 
-        lightbulbService
+        this.services.lightbulbService
             .getCharacteristic(Characteristic.On)
             .on('get', this.getPowerState.bind(this))
             .on('set', this.setPowerState.bind(this));
 
-        lightbulbService
+        this.services.lightbulbService
             .addCharacteristic(new Characteristic.Brightness())
             .on('get', this.getBrightness.bind(this))
             .on('set', this.setBrightness.bind(this));
 
-        lightbulbService
+        this.services.lightbulbService
             .addCharacteristic(new Characteristic.Hue())
             .on('get', this.getHue.bind(this))
             .on('set', this.setHue.bind(this));
 
-        lightbulbService
+        this.services.lightbulbService
             .addCharacteristic(new Characteristic.Saturation())
             .on('get', this.getSaturation.bind(this))
             .on('set', this.setSaturation.bind(this));
 
-        return [informationService, lightbulbService];
+        return [this.services.informationService, this.services.lightbulbService];
     },
 
     getPowerState: function(callback) {
@@ -84,28 +84,36 @@ I2CLED.prototype = {
             }
 
             if (red == 0 && green == 0 && blue == 0) {
+                this.cache.state = false;
                 callback(null, false);
             } else {
+                this.cache.state = true;
                 callback(null, true);
             }
-        })
+        }.bind(this));
     },
     setPowerState: function(state, callback) {
-        let red, green, blue;
-        red = green = blue = 0;
-
-        if (state) {
-            red = this.cache.red;
-            green = this.cache.green;
-            blue = this.cache.blue;
+        if (state && !this.cache.state) {
+            this._setRGB(function(err) {
+                if (err) {
+                    callback(err);
+                } else {
+                    this.cache.state = true;
+                    callback();
+                }
+            }.bind(this));
+        } else if (!state && this.cache.state) {
+            this.setColors(0, 0, 0, function(err) {
+                if (err) {
+                    callback(err);
+                } else {
+                    this.cache.state = false;
+                    callback();
+                }
+            }.bind(this));
+        } else {
+            callback();
         }
-        this.setColors(red, green, blue, function(err) {
-            if (err) {
-                callback(err);
-            } else {
-                callback(null);
-            }
-        })
     },
     getBrightness: function(callback) {
         callback(null, this.cache.brightness);
@@ -162,9 +170,16 @@ I2CLED.prototype = {
             if (err) {
                 callback(err);
             } else {
+                this.getPowerState(function(err, val){
+                    if (!err) {
+                        this.services.lightbulbService
+                            .getCharacteristic(Characteristic.On)
+                            .updateValue(val);
+                    }
+                }.bind(this));
                 callback();
             }
-        });
+        }.bind(this));
     },
     readInteger: function(address, callback) {
         this.wire.readBytes(address, 2, function(error, res) {
@@ -208,12 +223,6 @@ I2CLED.prototype = {
                         return;
                     }
 
-                    if (red != 0 || green != 0 || blue != 0) {
-                        this.cache.red = red;
-                        this.cache.green = green;
-                        this.cache.blue = blue;
-                    }
-
                     callback(null, red, green, blue);
                 }.bind(this));
             }.bind(this));
@@ -234,12 +243,6 @@ I2CLED.prototype = {
                     if (err3) {
                         callback(err3);
                         return;
-                    }
-
-                    if (red != 0 || green != 0 || blue != 0) {
-                        this.cache.red = red;
-                        this.cache.green = green;
-                        this.cache.blue = blue;
                     }
 
                     callback();
